@@ -11,6 +11,9 @@ const milkyBlend = localFont({
 export const metadata: Metadata = {
   title: "Sellybean's Turtle App",
   description: "Turtle App",
+  icons: {
+    icon: '/turtle_favicon.png',
+  },
 };
 
 export default function RootLayout({
