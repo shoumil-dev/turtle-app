@@ -16,7 +16,7 @@ export default function Home() {
   // Physics state – keep position in a ref so the animation loop doesn't restart every frame
   const noButtonPosRef = useRef({ x: 0, y: 0 });
   const velocityRef = useRef({ x: 0, y: 0 });
-  const animationFrameRef = useRef<number | undefined>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const mousePositionRef = useRef({ x: 0, y: 0 });
   
   const hoverSoundRef = useRef<HTMLAudioElement | null>(null);
