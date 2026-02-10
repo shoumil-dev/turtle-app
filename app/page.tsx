@@ -13,40 +13,48 @@ export default function Home() {
   const [startHovered, setStartHovered] = useState(false);
   const noButtonRef = useRef<HTMLDivElement>(null);
   
-  // Physics state
+  // Physics state – keep position in a ref so the animation loop doesn't restart every frame
+  const noButtonPosRef = useRef({ x: 0, y: 0 });
   const velocityRef = useRef({ x: 0, y: 0 });
   const animationFrameRef = useRef<number | undefined>();
   const mousePositionRef = useRef({ x: 0, y: 0 });
   
-  // Audio refs for preloading
   const hoverSoundRef = useRef<HTMLAudioElement | null>(null);
   const clickSoundRef = useRef<HTMLAudioElement | null>(null);
+  const cheeringRef = useRef<HTMLAudioElement | null>(null);
 
-  // Preload audio on mount
   useEffect(() => {
-    // Preload hover sound
     hoverSoundRef.current = new Audio('/soft_bubble_hover.mp3');
-    hoverSoundRef.current.volume = 0.5; // Subtle volume
+    hoverSoundRef.current.volume = 0.5;
     hoverSoundRef.current.preload = 'auto';
-    
-    // Preload click sound
     clickSoundRef.current = new Audio('/soft_click.mp3');
-    clickSoundRef.current.volume = 0.6; // Slightly louder for confirmation
+    clickSoundRef.current.volume = 0.6;
     clickSoundRef.current.preload = 'auto';
-    
+    cheeringRef.current = new Audio('/sounds/kids_cheering.mp3');
+    cheeringRef.current.volume = 0.6;
+    cheeringRef.current.preload = 'auto';
     return () => {
-      // Cleanup
-      if (hoverSoundRef.current) {
-        hoverSoundRef.current.pause();
-        hoverSoundRef.current = null;
-      }
-      if (clickSoundRef.current) {
-        clickSoundRef.current.pause();
-        clickSoundRef.current = null;
-      }
+      [hoverSoundRef, clickSoundRef, cheeringRef].forEach((r) => {
+        if (r.current) {
+          r.current.pause();
+          r.current = null;
+        }
+      });
     };
   }, []);
 
+  // Play cheering once when the final "Love you" page mounts (user already interacted by clicking Yes)
+  useEffect(() => {
+    if (!showSuccess) return;
+    const audio = cheeringRef.current;
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.loop = false;
+    audio.volume = 0.6;
+    audio.play().catch(() => {});
+  }, [showSuccess]);
+
+  // Single animation loop: run effect once so we don't restart RAF every frame (was causing jitter)
   useEffect(() => {
     const updatePhysics = () => {
       if (!noButtonRef.current) {
@@ -57,87 +65,75 @@ export default function Home() {
       const rect = noButtonRef.current.getBoundingClientRect();
       const buttonCenterX = rect.left + rect.width / 2;
       const buttonCenterY = rect.top + rect.height / 2;
-      
+
+      const pos = noButtonPosRef.current;
       const mouseX = mousePositionRef.current.x;
       const mouseY = mousePositionRef.current.y;
-      
-      // Calculate distance from cursor to button
+
       const dx = buttonCenterX - mouseX;
       const dy = buttonCenterY - mouseY;
       const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      // Repulsion parameters
-      const repulsionRadius = 200;
-      const panicRadius = 100; // Extra panic when very close
-      let maxForce = 2.5;
-      let damping = 0.85; // Friction/air resistance
-      
+
+      const repulsionRadius = 250;
+      const panicRadius = 100;
+      let maxForce = 5;
+      let damping = 0.85;
+
       if (distance < repulsionRadius && distance > 0) {
-        // Panic reaction - increase speed when very close
         if (distance < panicRadius) {
-          maxForce = 4.0; // Panic boost!
-          damping = 0.90; // Less friction when panicking
+          maxForce = 8.0;
+          damping = 0.90;
         }
-        
-        // Calculate repulsion force (stronger when closer)
         const forceMagnitude = maxForce * (1 - distance / repulsionRadius);
-        
-        // Normalize direction and apply force
         let forceX = (dx / distance) * forceMagnitude;
         let forceY = (dy / distance) * forceMagnitude;
-        
-        // Add slight randomness for alive feeling
-        const randomness = 0.3;
+        const randomness = 0.15;
         forceX += (Math.random() - 0.5) * randomness;
         forceY += (Math.random() - 0.5) * randomness;
-        
-        // Apply acceleration to velocity
         velocityRef.current.x += forceX;
         velocityRef.current.y += forceY;
-        
         setNoIsRunning(true);
       } else {
         setNoIsRunning(false);
-        // Smoother stop when no force applied
-        damping = 0.80; // More friction to ease to stop
+        damping = 0.80;
       }
-      
-      // Apply damping to velocity
+
       velocityRef.current.x *= damping;
       velocityRef.current.y *= damping;
-      
-      // Calculate wobble/tilt rotation based on velocity
-      const targetRotation = velocityRef.current.x * 2; // Tilt based on horizontal velocity
-      setRotation(prev => prev + (targetRotation - prev) * 0.1); // Smooth rotation
-      
-      // Update position based on velocity
-      const newX = noButtonPos.x + velocityRef.current.x;
-      const newY = noButtonPos.y + velocityRef.current.y;
-      
-      // Keep within viewport bounds with soft clamping
-      const maxX = window.innerWidth / 2 - rect.width / 2 - 50;
-      const maxY = window.innerHeight / 2 - rect.height / 2 - 50;
-      
-      const clampedX = Math.max(-maxX, Math.min(maxX, newX));
-      const clampedY = Math.max(-maxY, Math.min(maxY, newY));
-      
-      // If we hit a boundary, dampen velocity in that direction
+
+      const targetRotation = velocityRef.current.x * 2;
+      setRotation((prev) => prev + (targetRotation - prev) * 0.1);
+
+      const newX = pos.x + velocityRef.current.x;
+      const newY = pos.y + velocityRef.current.y;
+
+      const layoutCenterX = buttonCenterX - pos.x;
+      const layoutCenterY = buttonCenterY - pos.y;
+      const minCenterX = rect.width / 2;
+      const maxCenterX = window.innerWidth - rect.width / 2;
+      const minCenterY = rect.height / 2;
+      const maxCenterY = window.innerHeight - rect.height / 2;
+      const clampedCenterX = Math.max(minCenterX, Math.min(maxCenterX, layoutCenterX + newX));
+      const clampedCenterY = Math.max(minCenterY, Math.min(maxCenterY, layoutCenterY + newY));
+      const clampedX = clampedCenterX - layoutCenterX;
+      const clampedY = clampedCenterY - layoutCenterY;
+
       if (clampedX !== newX) velocityRef.current.x *= -0.3;
       if (clampedY !== newY) velocityRef.current.y *= -0.3;
-      
+
+      noButtonPosRef.current = { x: clampedX, y: clampedY };
       setNoButtonPos({ x: clampedX, y: clampedY });
-      
+
       animationFrameRef.current = requestAnimationFrame(updatePhysics);
     };
 
     animationFrameRef.current = requestAnimationFrame(updatePhysics);
-
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [noButtonPos.x, noButtonPos.y]);
+  }, []);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     mousePositionRef.current = { x: e.clientX, y: e.clientY };
@@ -220,7 +216,7 @@ export default function Home() {
 
   if (showSuccess) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-pink-100 via-red-50 to-pink-200 animate-slideDown relative font-milky-blend">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-pink-100 via-red-50 to-pink-200 relative font-milky-blend">
         <Image
           src="/background_2.png"
           alt="Background"
@@ -238,8 +234,8 @@ export default function Home() {
             className="mx-auto rounded-lg"
             unoptimized
           />
-          <h1 className="text-5xl font-bold text-red-600 animate-bounce">
-            Thank you for being my valentine!
+          <h1 className="text-5xl font-bold text-pink-600 animate-spinIn">
+            LOVE YOUUUUUUUU!!!!!
           </h1>
         </div>
       </div>

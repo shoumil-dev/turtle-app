@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 
 const SPRITE_TYPES = ["/heart_sprite.png", "/star_sprite.png"] as const;
-const COUNT = 10; // 6–14 total, using 10 for balance
+const COUNT = 14; // 6–14 total, using 10 for balance
 const BASE_SIZE = 36;
 const MIN_SCALE = 0.6;
 const MAX_SCALE = 1.2;
